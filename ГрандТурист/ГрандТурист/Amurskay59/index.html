@@ -1,0 +1,1467 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="mobile-web-app-capable" content="yes">
+    <title>VR Building Viewer</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+            -webkit-touch-callout: none;
+            -webkit-user-select: none;
+            user-select: none;
+        }
+        
+        html, body {
+            background: #000;
+            overflow: hidden;
+            width: 100%;
+            height: 100%;
+            font-family: Arial, sans-serif;
+            position: fixed;
+            touch-action: none;
+            -webkit-text-size-adjust: none;
+            text-size-adjust: none;
+            overscroll-behavior: none;
+        }
+        
+        #renderCanvas {
+            width: 100%;
+            height: 100%;
+            display: block;
+            outline: none;
+            touch-action: none;
+        }
+        
+        .loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: white;
+            font-size: 18px;
+            z-index: 1000;
+            text-align: center;
+            background: rgba(0,0,0,0.7);
+            padding: 20px;
+            border-radius: 10px;
+        }
+        
+        .hidden {
+            display: none !important;
+        }
+        
+        .view-indicator {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            color: #fff;
+            background: rgba(0,0,0,0.7);
+            padding: 10px 15px;
+            border-radius: 20px;
+            font-size: 14px;
+            z-index: 100;
+            transition: opacity 0.5s;
+        }
+        
+        .mode-indicator {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            color: #fff;
+            background: rgba(0,0,0,0.7);
+            padding: 10px 15px;
+            border-radius: 20px;
+            font-size: 14px;
+            z-index: 100;
+            transition: opacity 0.5s;
+        }
+        
+        .side-indicator {
+            position: absolute;
+            bottom: 20px;
+            left: 0;
+            right: 0;
+            color: white;
+            text-align: center;
+            background: rgba(0,0,0,0.5);
+            padding: 10px;
+            font-size: 16px;
+            z-index: 100;
+            transition: opacity 0.5s;
+        }
+        
+        .gesture-indicator {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 80px;
+            height: 80px;
+            background: rgba(255,255,255,0.1);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 32px;
+            z-index: 100;
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+        
+        .gesture-indicator.active {
+            opacity: 1;
+        }
+        
+        @keyframes tapPulse {
+            0% { transform: translate(-50%, -50%) scale(1); }
+            50% { transform: translate(-50%, -50%) scale(1.2); }
+            100% { transform: translate(-50%, -50%) scale(1); }
+        }
+        
+        .tap-animation {
+            animation: tapPulse 0.5s ease-in-out;
+        }
+        
+        .fullscreen-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: #000;
+            z-index: 9999;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            color: white;
+            text-align: center;
+            padding: 20px;
+        }
+        
+        .fullscreen-btn {
+            background: rgba(255,255,255,0.2);
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 10px;
+            font-size: 18px;
+            margin-top: 20px;
+            cursor: pointer;
+        }
+        
+        .error-message {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: #ff6b6b;
+            font-size: 16px;
+            text-align: center;
+            background: rgba(0,0,0,0.8);
+            padding: 20px;
+            border-radius: 10px;
+            z-index: 1000;
+            max-width: 80%;
+        }
+        
+        .gyro-status {
+            position: absolute;
+            top: 60px;
+            left: 20px;
+            color: #fff;
+            background: rgba(0,0,0,0.7);
+            padding: 10px 15px;
+            border-radius: 20px;
+            font-size: 14px;
+            z-index: 100;
+            transition: opacity 0.5s;
+        }
+        
+        .fade-out {
+            opacity: 0;
+        }
+        
+        .mode-toggle-btn {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            width: 60px;
+            height: 60px;
+            background: rgba(255,255,255,0.2);
+            border: none;
+            border-radius: 50%;
+            color: white;
+            font-size: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 100;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+        }
+        
+        .mode-toggle-btn:hover {
+            background: rgba(255,255,255,0.3);
+        }
+        
+        .mode-toggle-btn:active {
+            transform: scale(0.95);
+        }
+
+        .gallery-toggle-btn {
+            position: absolute;
+            bottom: 90px;
+            right: 20px;
+            width: 60px;
+            height: 60px;
+            background: rgba(255,255,255,0.2);
+            border: none;
+            border-radius: 50%;
+            color: white;
+            font-size: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 100;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+        }
+        
+        .gallery-toggle-btn:hover {
+            background: rgba(255,255,255,0.3);
+        }
+        
+        .gallery-toggle-btn:active {
+            transform: scale(0.95);
+        }
+
+        .music-toggle-btn {
+            position: absolute;
+            bottom: 160px;
+            right: 20px;
+            width: 60px;
+            height: 60px;
+            background: rgba(255,255,255,0.2);
+            border: none;
+            border-radius: 50%;
+            color: white;
+            font-size: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 100;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+        }
+        
+        .music-toggle-btn:hover {
+            background: rgba(255,255,255,0.3);
+        }
+        
+        .music-toggle-btn:active {
+            transform: scale(0.95);
+        }
+
+        .music-toggle-btn.muted {
+            opacity: 0.5;
+        }
+
+        .vr-divider {
+            position: absolute;
+            top: 0;
+            left: 50%;
+            width: 2px;
+            height: 100%;
+            background: rgba(255,255,255,0.1);
+            z-index: 50;
+            pointer-events: none;
+        }
+
+        .gallery-container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: #000;
+            z-index: 200;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .image-container {
+            position: relative;
+            flex: 1;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            width: 100%;
+            overflow: hidden;
+        }
+        
+        .gallery-image {
+            transition: opacity 0.3s ease;
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+        }
+        
+        .gallery-controls {
+            flex-shrink: 0;
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+            padding: 20px;
+            background: rgba(0,0,0,0.7);
+        }
+        
+        .gallery-btn {
+            background: rgba(255,255,255,0.2);
+            color: white;
+            border: none;
+            padding: 15px 25px;
+            border-radius: 10px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+        }
+        
+        .gallery-btn:hover {
+            background: rgba(255,255,255,0.3);
+        }
+        
+        .gallery-btn:active {
+            transform: scale(0.95);
+        }
+        
+        .photo-counter {
+            position: absolute;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: white;
+            background: rgba(0,0,0,0.7);
+            padding: 10px 15px;
+            border-radius: 20px;
+            font-size: 14px;
+            z-index: 210;
+        }
+
+        .volume-control {
+            position: absolute;
+            bottom: 230px;
+            right: 20px;
+            width: 60px;
+            height: 120px;
+            background: rgba(0,0,0,0.7);
+            border-radius: 30px;
+            padding: 10px 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: space-between;
+            z-index: 100;
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+        }
+
+        .volume-slider {
+            width: 5px;
+            height: 80px;
+            background: rgba(255,255,255,0.2);
+            border-radius: 5px;
+            position: relative;
+            cursor: pointer;
+        }
+
+        .volume-level {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            background: #4CAF50;
+            border-radius: 5px;
+            transition: height 0.2s;
+        }
+
+        .volume-up, .volume-down {
+            background: none;
+            border: none;
+            color: white;
+            font-size: 16px;
+            cursor: pointer;
+            padding: 5px;
+        }
+        
+        .gallery-loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: white;
+            z-index: 1;
+        }
+        
+        /* Стили для названия лечебницы */
+        .clinic-title {
+            position: absolute;
+            top: 10px;
+            left: 0;
+            right: 0;
+            text-align: center;
+            color: white;
+            font-size: 18px;
+            font-weight: bold;
+            z-index: 100;
+            background: rgba(0,0,0,0.7);
+            padding: 10px 20px;
+            margin: 0 auto;
+            width: fit-content;
+            border-radius: 0 0 10px 10px;
+            transition: opacity 0.5s;
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+        }
+        
+        /* Адаптивные стили для названия */
+        @media (max-width: 768px) {
+            .clinic-title {
+                font-size: 16px;
+                padding: 8px 15px;
+            }
+        }
+        
+        @media (max-width: 480px) {
+            .clinic-title {
+                font-size: 14px;
+                padding: 6px 12px;
+            }
+        }
+        
+        @media (max-height: 500px) {
+            .clinic-title {
+                font-size: 12px;
+                padding: 4px 10px;
+            }
+        }
+        
+        /* Стили для адаптации изображения под экран */
+        @media (orientation: portrait) {
+            .gallery-image {
+                object-fit: contain;
+            }
+        }
+        
+        @media (orientation: landscape) {
+            .gallery-image {
+                object-fit: contain;
+            }
+        }
+        
+        /* Для очень маленьких экранов */
+        @media (max-height: 500px) {
+            .gallery-controls {
+                padding: 10px;
+            }
+            
+            .gallery-btn {
+                padding: 10px 15px;
+                font-size: 14px;
+            }
+            
+            .photo-counter {
+                top: 10px;
+                font-size: 12px;
+                padding: 8px 12px;
+            }
+        }
+        
+        /* Для очень широких экранов */
+        @media (min-aspect-ratio: 2/1) {
+            .gallery-image {
+                object-fit: cover;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div id="fullscreenOverlay" class="fullscreen-overlay">
+        <h2>VR Building Viewer</h2>
+        <p>Для наилучшего опыта используйте полноэкранный режим</p>
+        <button id="enterFullscreen" class="fullscreen-btn">Открыть в полноэкранном режиме</button>
+        <p style="margin-top: 20px; font-size: 14px; opacity: 0.7;">Или нажмите на экран для продолжения</p>
+    </div>
+    
+    <div id="loading" class="loading hidden">
+        Загрузка модели...<br>
+        <small>Разрешите доступ к гироскопу при запросе</small>
+    </div>
+    
+    <!-- Добавлен заголовок лечебницы -->
+    <div id="clinicTitle" class="clinic-title hidden">Торговый дом Бадмаева</div>
+    
+    <div id="viewIndicator" class="view-indicator hidden">Вид: Фасад</div>
+    <div id="modeIndicator" class="mode-indicator hidden">Режим: Обычный</div>
+    <div id="gyroStatus" class="gyro-status hidden">Гироскоп: Не активен</div>
+    
+    <div id="sideIndicator" class="side-indicator hidden">
+        Нажмите на экран для смены стороны
+    </div>
+    
+    <div class="gesture-indicator hidden" id="gestureIndicator">👆</div>
+    
+    <button id="modeToggleBtn" class="mode-toggle-btn hidden">🔄</button>
+    <button id="galleryToggleBtn" class="gallery-toggle-btn hidden">🖼️</button>
+    <button id="musicToggleBtn" class="music-toggle-btn hidden">🔊</button>
+    
+    <div id="volumeControl" class="volume-control hidden">
+        <button class="volume-up">+</button>
+        <div class="volume-slider">
+            <div class="volume-level" id="volumeLevel" style="height: 70%;"></div>
+        </div>
+        <button class="volume-down">-</button>
+    </div>
+    
+    <div id="errorMessage" class="error-message hidden"></div>
+    
+    <div id="vrDivider" class="vr-divider hidden"></div>
+    
+    <canvas id="renderCanvas" class="hidden"></canvas>
+
+    <div id="galleryContainer" class="gallery-container hidden">
+        <div class="photo-counter" id="photoCounter">Фото 1/10</div>
+        <div class="image-container">
+            <img id="galleryImage" class="gallery-image" src="" alt="Фото проекта">
+            <div id="galleryLoading" class="loading hidden">Загрузка изображения...</div>
+        </div>
+        <div class="gallery-controls">
+            <button id="prevPhotoBtn" class="gallery-btn">◀ Назад</button>
+            <button id="backToModelBtn" class="gallery-btn">Вернуться к 3D</button>
+            <button id="nextPhotoBtn" class="gallery-btn">Вперед ▶</button>
+        </div>
+    </div>
+
+    <script src="https://cdn.babylonjs.com/babylon.js"></script>
+    <script src="https://cdn.babylonjs.com/loaders/babylonjs.loaders.min.js"></script>
+    
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Элементы интерфейса
+            const fullscreenOverlay = document.getElementById('fullscreenOverlay');
+            const enterFullscreenBtn = document.getElementById('enterFullscreen');
+            const canvas = document.getElementById('renderCanvas');
+            const loadingElement = document.getElementById('loading');
+            const clinicTitle = document.getElementById('clinicTitle');
+            const viewIndicator = document.getElementById('viewIndicator');
+            const modeIndicator = document.getElementById('modeIndicator');
+            const gyroStatus = document.getElementById('gyroStatus');
+            const sideIndicator = document.getElementById('sideIndicator');
+            const gestureIndicator = document.getElementById('gestureIndicator');
+            const modeToggleBtn = document.getElementById('modeToggleBtn');
+            const galleryToggleBtn = document.getElementById('galleryToggleBtn');
+            const musicToggleBtn = document.getElementById('musicToggleBtn');
+            const volumeControl = document.getElementById('volumeControl');
+            const volumeLevel = document.getElementById('volumeLevel');
+            const errorMessage = document.getElementById('errorMessage');
+            const vrDivider = document.getElementById('vrDivider');
+            const galleryLoading = document.getElementById('galleryLoading');
+            
+            // Элементы галереи
+            const galleryContainer = document.getElementById('galleryContainer');
+            const galleryImage = document.getElementById('galleryImage');
+            const prevPhotoBtn = document.getElementById('prevPhotoBtn');
+            const nextPhotoBtn = document.getElementById('nextPhotoBtn');
+            const backToModelBtn = document.getElementById('backToModelBtn');
+            const photoCounter = document.getElementById('photoCounter');
+            
+            // Данные галереи - замените на реальные пути к вашим изображениям
+            const photos = [
+                './l1.jpg',
+                './l2.jpg',
+            ];
+            
+            let currentPhotoIndex = 0;
+            let isInGallery = false;
+            
+            // Аудио элементы
+            let backgroundMusic = new Audio();
+            let isMusicPlaying = false;
+            let volume = 0.7;
+            
+            // Функция для адаптации изображения под экран
+            function adaptImageToScreen() {
+                if (!isInGallery) return;
+                
+                const screenWidth = window.innerWidth;
+                const screenHeight = window.innerHeight;
+                const screenRatio = screenWidth / screenHeight;
+                
+                // Определяем ориентацию устройства
+                const isPortrait = screenHeight > screenWidth;
+                
+                // Для портретной ориентации - contain, для ландшафтной - cover или contain в зависимости от соотношения
+                if (isPortrait) {
+                    galleryImage.style.objectFit = 'contain';
+                } else {
+                    // Если экран очень широкий, используем cover для лучшего заполнения
+                    if (screenRatio > 1.8) {
+                        galleryImage.style.objectFit = 'cover';
+                    } else {
+                        galleryImage.style.objectFit = 'contain';
+                    }
+                }
+                
+                console.log(`Адаптация изображения: ${screenWidth}x${screenHeight}, ratio: ${screenRatio.toFixed(2)}, object-fit: ${galleryImage.style.objectFit}`);
+            }
+            
+            // Слушатель изменения размера окна
+            window.addEventListener('resize', adaptImageToScreen);
+            window.addEventListener('orientationchange', adaptImageToScreen);
+            
+            // Инициализация музыки
+            function initMusic() {
+                backgroundMusic.src = './music.mp3';
+                backgroundMusic.loop = true;
+                backgroundMusic.volume = volume;
+                updateVolumeDisplay();
+            }
+            
+            // Функция переключения музыки
+            function toggleMusic() {
+                if (isMusicPlaying) {
+                    backgroundMusic.pause();
+                    musicToggleBtn.textContent = '🔇';
+                    musicToggleBtn.classList.add('muted');
+                } else {
+                    backgroundMusic.play().catch(e => {
+                        console.log("Автовоспроизведение заблокировано, требуется взаимодействие пользователя");
+                    });
+                    musicToggleBtn.textContent = '🔊';
+                    musicToggleBtn.classList.remove('muted');
+                }
+                isMusicPlaying = !isMusicPlaying;
+            }
+            
+            // Функция изменения громкости
+            function changeVolume(delta) {
+                volume = Math.max(0, Math.min(1, volume + delta));
+                backgroundMusic.volume = volume;
+                updateVolumeDisplay();
+            }
+            
+            // Обновление отображения громкости
+            function updateVolumeDisplay() {
+                volumeLevel.style.height = (volume * 100) + '%';
+            }
+            
+            // Обработчики для управления музыкой
+            musicToggleBtn.addEventListener('click', toggleMusic);
+            
+            // Обработчики для регулятора громкости
+            document.querySelector('.volume-up').addEventListener('click', () => changeVolume(0.1));
+            document.querySelector('.volume-down').addEventListener('click', () => changeVolume(-0.1));
+            
+            // Показ/скрытие регулятора громкости при долгом нажатии на кнопку музыки
+            let musicButtonTimer;
+            musicToggleBtn.addEventListener('touchstart', function() {
+                musicButtonTimer = setTimeout(() => {
+                    volumeControl.classList.toggle('hidden');
+                }, 500);
+            });
+            
+            musicToggleBtn.addEventListener('touchend', function() {
+                clearTimeout(musicButtonTimer);
+            });
+            
+            musicToggleBtn.addEventListener('click', function(e) {
+                if (e.detail === 2) {
+                    volumeControl.classList.toggle('hidden');
+                }
+            });
+            
+            // Функции галереи
+            function showGallery() {
+                isInGallery = true;
+                canvas.classList.add('hidden');
+                clinicTitle.classList.add('hidden');
+                viewIndicator.classList.add('hidden');
+                modeIndicator.classList.add('hidden');
+                gyroStatus.classList.add('hidden');
+                sideIndicator.classList.add('hidden');
+                modeToggleBtn.classList.add('hidden');
+                galleryToggleBtn.classList.add('hidden');
+                musicToggleBtn.classList.add('hidden');
+                volumeControl.classList.add('hidden');
+                vrDivider.classList.add('hidden');
+                galleryContainer.classList.remove('hidden');
+                
+                // Адаптируем изображение под текущий экран
+                adaptImageToScreen();
+                loadPhoto(currentPhotoIndex);
+            }
+            
+            function showModel() {
+                isInGallery = false;
+                galleryContainer.classList.add('hidden');
+                canvas.classList.remove('hidden');
+                clinicTitle.classList.remove('hidden');
+                viewIndicator.classList.remove('hidden');
+                modeIndicator.classList.remove('hidden');
+                gyroStatus.classList.remove('hidden');
+                sideIndicator.classList.remove('hidden');
+                modeToggleBtn.classList.remove('hidden');
+                galleryToggleBtn.classList.remove('hidden');
+                musicToggleBtn.classList.remove('hidden');
+            }
+            
+            function loadPhoto(index) {
+                currentPhotoIndex = index;
+                galleryLoading.classList.remove('hidden');
+                galleryImage.style.opacity = '0';
+                
+                const img = new Image();
+                img.onload = function() {
+                    galleryImage.src = this.src;
+                    galleryImage.style.opacity = '1';
+                    galleryLoading.classList.add('hidden');
+                    photoCounter.textContent = `Фото ${index + 1}/${photos.length}`;
+                    
+                    // Повторная адаптация после загрузки изображения
+                    setTimeout(adaptImageToScreen, 100);
+                };
+                
+                img.onerror = function() {
+                    console.error("Не удалось загрузить изображение:", photos[index]);
+                    
+                    // Создаем цветную заглушку, адаптированную под экран
+                    const colors = ['#ff6b6b', '#4ecdc4', '#45b7d1', '#96ceb4', '#feca57', 
+                                   '#ff9ff3', '#54a0ff', '#5f27cd', '#00d2d3', '#ff9f43'];
+                    const color = colors[index % colors.length];
+                    
+                    const screenWidth = window.innerWidth;
+                    const screenHeight = window.innerHeight;
+                    
+                    const tempCanvas = document.createElement('canvas');
+                    tempCanvas.width = screenWidth;
+                    tempCanvas.height = screenHeight;
+                    const ctx = tempCanvas.getContext('2d');
+                    
+                    ctx.fillStyle = color;
+                    ctx.fillRect(0, 0, screenWidth, screenHeight);
+                    ctx.fillStyle = 'white';
+                    
+                    // Адаптируем размер текста под экран
+                    const fontSize = Math.min(screenWidth, screenHeight) * 0.05;
+                    ctx.font = `bold ${fontSize}px Arial`;
+                    ctx.textAlign = 'center';
+                    ctx.fillText(`Фото ${index + 1}`, screenWidth/2, screenHeight/2);
+                    
+                    ctx.font = `${fontSize * 0.5}px Arial`;
+                    ctx.fillText('Изображение не найдено', screenWidth/2, screenHeight/2 + fontSize);
+                    
+                    galleryImage.src = tempCanvas.toDataURL();
+                    galleryImage.style.opacity = '1';
+                    galleryLoading.classList.add('hidden');
+                    photoCounter.textContent = `Фото ${index + 1}/${photos.length}`;
+                };
+                
+                img.src = photos[index];
+            }
+            
+            function nextPhoto() {
+                currentPhotoIndex = (currentPhotoIndex + 1) % photos.length;
+                loadPhoto(currentPhotoIndex);
+            }
+            
+            function prevPhoto() {
+                currentPhotoIndex = (currentPhotoIndex - 1 + photos.length) % photos.length;
+                loadPhoto(currentPhotoIndex);
+            }
+            
+            // Обработчики галереи
+            galleryToggleBtn.addEventListener('click', showGallery);
+            backToModelBtn.addEventListener('click', showModel);
+            nextPhotoBtn.addEventListener('click', nextPhoto);
+            prevPhotoBtn.addEventListener('click', prevPhoto);
+            
+            // Обработка клавиатуры в галерее
+            document.addEventListener('keydown', function(e) {
+                if (!isInGallery) return;
+                
+                if (e.key === 'ArrowLeft') {
+                    prevPhoto();
+                } else if (e.key === 'ArrowRight') {
+                    nextPhoto();
+                } else if (e.key === 'Escape') {
+                    showModel();
+                }
+            });
+            
+            // Улучшенные свайпы для галереи
+            let galleryStartX = 0;
+            let galleryStartY = 0;
+            
+            galleryContainer.addEventListener('touchstart', function(e) {
+                galleryStartX = e.touches[0].clientX;
+                galleryStartY = e.touches[0].clientY;
+            });
+            
+            galleryContainer.addEventListener('touchend', function(e) {
+                if (!galleryStartX) return;
+                
+                const endX = e.changedTouches[0].clientX;
+                const endY = e.changedTouches[0].clientY;
+                const diffX = galleryStartX - endX;
+                const diffY = galleryStartY - endY;
+                
+                if (Math.abs(diffX) > Math.abs(diffY) && Math.abs(diffX) > 50) {
+                    if (diffX > 0) {
+                        nextPhoto();
+                    } else {
+                        prevPhoto();
+                    }
+                }
+                
+                galleryStartX = 0;
+                galleryStartY = 0;
+            });
+            
+            // Функция для входа в полноэкранный режим
+            function enterFullscreen() {
+                const element = document.documentElement;
+                
+                if (element.requestFullscreen) {
+                    element.requestFullscreen();
+                } else if (element.mozRequestFullScreen) {
+                    element.mozRequestFullScreen();
+                } else if (element.webkitRequestFullscreen) {
+                    element.webkitRequestfullscreen();
+                } else if (element.msRequestFullscreen) {
+                    element.msRequestFullscreen();
+                }
+                
+                fullscreenOverlay.classList.add('hidden');
+                loadingElement.classList.remove('hidden');
+                canvas.classList.remove('hidden');
+                clinicTitle.classList.remove('hidden');
+                viewIndicator.classList.remove('hidden');
+                modeIndicator.classList.remove('hidden');
+                gyroStatus.classList.remove('hidden');
+                sideIndicator.classList.remove('hidden');
+                modeToggleBtn.classList.remove('hidden');
+                galleryToggleBtn.classList.remove('hidden');
+                musicToggleBtn.classList.remove('hidden');
+                
+                initMusic();
+                initApp();
+            }
+            
+            enterFullscreenBtn.addEventListener('click', enterFullscreen);
+            fullscreenOverlay.addEventListener('click', enterFullscreen);
+            
+            document.addEventListener('touchstart', function() {
+                if (!document.fullscreenElement && !fullscreenOverlay.classList.contains('hidden')) {
+                    enterFullscreen();
+                }
+            });
+            
+            // Основная функция инициализации приложения
+            function initApp() {
+                const engine = new BABYLON.Engine(canvas, true, {
+                    preserveDrawingBuffer: true,
+                    stencil: true
+                });
+                
+                const scene = new BABYLON.Scene(engine);
+                scene.clearColor = new BABYLON.Color4(0, 0, 0, 1);
+                
+                // Переменные для управления
+                let isVRMode = false;
+                let isStereoscopicMode = false;
+                let gyroEnabled = false;
+                let alphaOffset = 0;
+                let betaOffset = 0;
+                let needCalibration = false;
+                let autoRotate = false;
+                let autoRotateSpeed = 0.005;
+                
+                const modes = [
+                    { 
+                        name: "Обычный", 
+                        value: "manual", 
+                        icon: "👆",
+                        description: "Обычный режим"
+                    },
+                    { 
+                        name: "Автоповорот", 
+                        value: "auto", 
+                        icon: "🔄",
+                        description: "Автоматическое вращение"
+                    },
+                    { 
+                        name: "VR Стерео", 
+                        value: "vr_stereo", 
+                        icon: "👓",
+                        description: "VR стереоскопический режим"
+                    },
+                    { 
+                        name: "VR", 
+                        value: "vr", 
+                        icon: "🥽",
+                        description: "VR режим с гироскопом"
+                    }
+                ];
+                
+                let currentModeIndex = 0;
+                
+                const buildingSides = [
+                    { name: "Фасад", alpha: -Math.PI/2, beta: Math.PI/2.5, radius: 25 },
+                    { name: "Правая сторона", alpha: 0, beta: Math.PI/2.5, radius: 25 },
+                    { name: "Тыльная сторона", alpha: Math.PI/2, beta: Math.PI/2.5, radius: 25 },
+                    { name: "Левая сторона", alpha: Math.PI, beta: Math.PI/2.5, radius: 25 },
+                    { name: "Вид сверху", alpha: -Math.PI/2, beta: 0.2, radius: 30 },
+                    { name: "Вид снизу", alpha: -Math.PI/2, beta: Math.PI - 0.2, radius: 30 }
+                ];
+                
+                let currentSideIndex = 0;
+                
+                let camera = new BABYLON.ArcRotateCamera(
+                    "camera", 
+                    buildingSides[currentSideIndex].alpha, 
+                    buildingSides[currentSideIndex].beta, 
+                    buildingSides[currentSideIndex].radius, 
+                    BABYLON.Vector3.Zero(), 
+                    scene
+                );
+                
+                let leftCamera, rightCamera;
+                
+                camera.lowerRadiusLimit = 10;
+                camera.upperRadiusLimit = 100;
+                camera.lowerBetaLimit = 0.1;
+                camera.upperBetaLimit = Math.PI - 0.1;
+                camera.panningSensibility = 1000;
+                camera.wheelPrecision = 50;
+                camera.inertia = 0.9;
+                
+                camera.inputs.clear();
+                
+                const light = new BABYLON.HemisphericLight("light", new BABYLON.Vector3(0, 1, 0), scene);
+                light.intensity = 1;
+                
+                const modelPath = "./building.glb";
+                
+                loadingElement.innerHTML = "Загрузка модели...<br><small>Путь: " + modelPath + "</small>";
+                
+                function createTestCube() {
+                    console.log("Создаем тестовый куб вместо модели");
+                    
+                    const testCube = BABYLON.MeshBuilder.CreateBox("testCube", { size: 5 }, scene);
+                    const material = new BABYLON.StandardMaterial("testMaterial", scene);
+                    material.diffuseColor = new BABYLON.Color3(0.5, 0.5, 1);
+                    testCube.material = material;
+                    testCube.position.y = 2.5;
+                    
+                    const ground = BABYLON.MeshBuilder.CreateGround("ground", { width: 50, height: 50 }, scene);
+                    const groundMaterial = new BABYLON.StandardMaterial("groundMaterial", scene);
+                    groundMaterial.diffuseColor = new BABYLON.Color3(0.3, 0.5, 0.2);
+                    ground.material = groundMaterial;
+                    
+                    return testCube;
+                }
+                
+                function hideInterfaceWithDelay() {
+                    setTimeout(() => {
+                        sideIndicator.classList.add('fade-out');
+                        setTimeout(() => {
+                            sideIndicator.classList.add('hidden');
+                        }, 500);
+                    }, 5000);
+                    
+                    let viewIndicatorTimeout, modeIndicatorTimeout;
+                    
+                    function resetViewIndicatorTimer() {
+                        clearTimeout(viewIndicatorTimeout);
+                        viewIndicator.classList.remove('fade-out');
+                        viewIndicator.classList.remove('hidden');
+                        viewIndicatorTimeout = setTimeout(() => {
+                            viewIndicator.classList.add('fade-out');
+                            setTimeout(() => {
+                                viewIndicator.classList.add('hidden');
+                            }, 500);
+                        }, 3000);
+                    }
+                    
+                    function resetModeIndicatorTimer() {
+                        clearTimeout(modeIndicatorTimeout);
+                        modeIndicator.classList.remove('fade-out');
+                        modeIndicator.classList.remove('hidden');
+                        modeIndicatorTimeout = setTimeout(() => {
+                            modeIndicator.classList.add('fade-out');
+                            setTimeout(() => {
+                                modeIndicator.classList.add('hidden');
+                            }, 500);
+                        }, 3000);
+                    }
+                    
+                    resetViewIndicatorTimer();
+                    resetModeIndicatorTimer();
+                    
+                    return { resetViewIndicatorTimer, resetModeIndicatorTimer };
+                }
+                
+                function setupStereoscopicVR() {
+                    if (leftCamera) {
+                        leftCamera.dispose();
+                    }
+                    if (rightCamera) {
+                        rightCamera.dispose();
+                    }
+                    
+                    leftCamera = new BABYLON.ArcRotateCamera(
+                        "leftCamera", 
+                        camera.alpha, 
+                        camera.beta, 
+                        camera.radius, 
+                        camera.getTarget(), 
+                        scene
+                    );
+                    
+                    rightCamera = new BABYLON.ArcRotateCamera(
+                        "rightCamera", 
+                        camera.alpha, 
+                        camera.beta, 
+                        camera.radius, 
+                        camera.getTarget(), 
+                        scene
+                    );
+                    
+                    leftCamera.viewport = new BABYLON.Viewport(0, 0, 0.5, 1.0);
+                    rightCamera.viewport = new BABYLON.Viewport(0.5, 0, 0.5, 1.0);
+                    
+                    leftCamera.inputs.clear();
+                    rightCamera.inputs.clear();
+                    
+                    scene.activeCameras = [leftCamera, rightCamera];
+                    
+                    vrDivider.classList.remove('hidden');
+                    
+                    console.log("Стереоскопический VR режим активирован");
+                }
+                
+                function disableStereoscopicVR() {
+                    scene.activeCameras = [camera];
+                    vrDivider.classList.add('hidden');
+                    console.log("Стереоскопический VR режим отключен");
+                }
+                
+                function switchMode(resetModeIndicatorTimer) {
+                    currentModeIndex = (currentModeIndex + 1) % modes.length;
+                    const newMode = modes[currentModeIndex];
+                    
+                    isVRMode = newMode.value === "vr" || newMode.value === "vr_stereo";
+                    isStereoscopicMode = newMode.value === "vr_stereo";
+                    autoRotate = newMode.value === "auto";
+                    
+                    if (isStereoscopicMode) {
+                        setupStereoscopicVR();
+                    } else {
+                        disableStereoscopicVR();
+                    }
+                    
+                    modeToggleBtn.textContent = newMode.icon;
+                    modeIndicator.textContent = "Режим: " + newMode.name;
+                    sideIndicator.textContent = newMode.description;
+                    
+                    if (isVRMode) {
+                        needCalibration = true;
+                        console.log("VR режим активирован");
+                        initGyroscope();
+                    } else if (autoRotate) {
+                        console.log("Автоповорот активирован");
+                    } else {
+                        console.log("Обычный режим активирован");
+                    }
+                    
+                    resetModeIndicatorTimer();
+                    
+                    sideIndicator.classList.remove('fade-out');
+                    sideIndicator.classList.remove('hidden');
+                    setTimeout(() => {
+                        sideIndicator.classList.add('fade-out');
+                        setTimeout(() => {
+                            sideIndicator.classList.add('hidden');
+                        }, 500);
+                    }, 3000);
+                    
+                    gestureIndicator.textContent = newMode.icon;
+                    gestureIndicator.classList.add('active');
+                    gestureIndicator.classList.add('tap-animation');
+                    
+                    setTimeout(() => {
+                        gestureIndicator.classList.remove('active');
+                    }, 2000);
+                }
+                
+                BABYLON.SceneLoader.ImportMesh("", modelPath, "", scene, 
+                    function(meshes, particleSystems, skeletons, animationGroups) {
+                        console.log("Модель успешно загружена:", meshes);
+                        
+                        loadingElement.classList.add('hidden');
+                        
+                        let building;
+                        
+                        if (meshes && meshes.length > 0) {
+                            building = meshes[0];
+                            
+                            if (building.getBoundingInfo) {
+                                const boundingInfo = building.getBoundingInfo();
+                                const center = boundingInfo.boundingBox.center;
+                                
+                                camera.setTarget(center);
+                                
+                                const extend = boundingInfo.boundingBox.extendSize;
+                                const modelSize = Math.max(extend.x, extend.y, extend.z);
+                                const optimalRadius = modelSize * 4;
+                                
+                                buildingSides.forEach(side => {
+                                    if (side.name.includes("сверху") || side.name.includes("снизу")) {
+                                        side.radius = Math.max(30, optimalRadius);
+                                    } else {
+                                        side.radius = Math.max(25, optimalRadius);
+                                    }
+                                });
+                                
+                                camera.radius = buildingSides[currentSideIndex].radius;
+                            } else {
+                                console.warn("Модель не имеет bounding info");
+                            }
+                        } else {
+                            console.warn("Модель загружена, но не содержит мешей");
+                            building = createTestCube();
+                        }
+                        
+                        const { resetViewIndicatorTimer, resetModeIndicatorTimer } = hideInterfaceWithDelay();
+                        initTouchControls(resetViewIndicatorTimer);
+                        
+                        modeToggleBtn.addEventListener('click', function() {
+                            switchMode(resetModeIndicatorTimer);
+                        });
+                        
+                    }, 
+                    function(evt) {
+                        if (evt.lengthComputable) {
+                            const percentLoaded = (evt.loaded / evt.total * 100).toFixed(0);
+                            loadingElement.innerHTML = `Загрузка модели... ${percentLoaded}%`;
+                        }
+                    }, 
+                    function(scene, message, exception) {
+                        console.error("Ошибка загрузки модели:", message, exception);
+                        
+                        createTestCube();
+                        
+                        errorMessage.innerHTML = "Ошибка загрузки модели: " + message + 
+                                                "<br>Создан тестовый куб для демонстрации." +
+                                                "<br>Убедитесь, что файл building.glb находится в правильной папке.";
+                        errorMessage.classList.remove('hidden');
+                        
+                        loadingElement.classList.add('hidden');
+                        
+                        const { resetViewIndicatorTimer, resetModeIndicatorTimer } = hideInterfaceWithDelay();
+                        initTouchControls(resetViewIndicatorTimer);
+                        
+                        modeToggleBtn.addEventListener('click', function() {
+                            switchMode(resetModeIndicatorTimer);
+                        });
+                        
+                        setTimeout(() => {
+                            errorMessage.classList.add('hidden');
+                        }, 5000);
+                    }
+                );
+                
+                function changeBuildingSide(resetViewIndicatorTimer) {
+                    currentSideIndex = (currentSideIndex + 1) % buildingSides.length;
+                    const newSide = buildingSides[currentSideIndex];
+                    
+                    camera.animateTo(
+                        {
+                            alpha: newSide.alpha,
+                            beta: newSide.beta,
+                            radius: newSide.radius
+                        },
+                        1000,
+                        BABYLON.EasingFunction.CubicEase
+                    );
+                    
+                    viewIndicator.textContent = "Вид: " + newSide.name;
+                    resetViewIndicatorTimer();
+                    
+                    sideIndicator.textContent = "Сторона изменена: " + newSide.name;
+                    sideIndicator.classList.remove('fade-out');
+                    sideIndicator.classList.remove('hidden');
+                    setTimeout(() => {
+                        sideIndicator.classList.add('fade-out');
+                        setTimeout(() => {
+                            sideIndicator.classList.add('hidden');
+                        }, 500);
+                    }, 3000);
+                }
+                
+                function initTouchControls(resetViewIndicatorTimer) {
+                    let lastTapTime = 0;
+                    let isDragging = false;
+                    let previousX = 0;
+                    let previousY = 0;
+                    let tapCount = 0;
+                    let tapTimeout = null;
+                    
+                    canvas.addEventListener('touchstart', function(e) {
+                        const currentTime = new Date().getTime();
+                        const tapLength = currentTime - lastTapTime;
+                        
+                        if (tapLength > 500) {
+                            tapCount = 0;
+                        }
+                        
+                        tapCount++;
+                        lastTapTime = currentTime;
+                        
+                        clearTimeout(tapTimeout);
+                        
+                        tapTimeout = setTimeout(function() {
+                            if (tapCount === 1 && !isVRMode && !autoRotate) {
+                                changeBuildingSide(resetViewIndicatorTimer);
+                            }
+                            tapCount = 0;
+                        }, 500);
+                        
+                        if (!isVRMode && !autoRotate) {
+                            isDragging = true;
+                            previousX = e.touches[0].clientX;
+                            previousY = e.touches[0].clientY;
+                            
+                            gestureIndicator.textContent = '👆';
+                            gestureIndicator.classList.add('active');
+                        }
+                        
+                        e.preventDefault();
+                    });
+                    
+                    canvas.addEventListener('touchmove', function(e) {
+                        if (!isDragging || isVRMode || autoRotate) return;
+                        
+                        const currentX = e.touches[0].clientX;
+                        const currentY = e.touches[0].clientY;
+                        
+                        const deltaX = currentX - previousX;
+                        const deltaY = currentY - previousY;
+                        
+                        camera.alpha -= deltaX * 0.005;
+                        camera.beta -= deltaY * 0.005;
+                        
+                        camera.beta = Math.max(camera.lowerBetaLimit, 
+                                              Math.min(camera.upperBetaLimit, camera.beta));
+                        
+                        previousX = currentX;
+                        previousY = currentY;
+                        
+                        e.preventDefault();
+                    });
+                    
+                    canvas.addEventListener('touchend', function(e) {
+                        isDragging = false;
+                        
+                        setTimeout(() => {
+                            gestureIndicator.classList.remove('active');
+                        }, 500);
+                        
+                        e.preventDefault();
+                    });
+                    
+                    let initialDistance = null;
+                    
+                    canvas.addEventListener('touchstart', function(e) {
+                        if (e.touches.length >= 2 && !isVRMode && !autoRotate) {
+                            const dx = e.touches[0].clientX - e.touches[1].clientX;
+                            const dy = e.touches[0].clientY - e.touches[1].clientY;
+                            initialDistance = Math.sqrt(dx * dx + dy * dy);
+                            
+                            gestureIndicator.textContent = '🤏';
+                        }
+                    });
+                    
+                    canvas.addEventListener('touchmove', function(e) {
+                        if (e.touches.length >= 2 && initialDistance !== null && !isVRMode && !autoRotate) {
+                            const dx = e.touches[0].clientX - e.touches[1].clientX;
+                            const dy = e.touches[0].clientY - e.touches[1].clientY;
+                            const currentDistance = Math.sqrt(dx * dx + dy * dy);
+                            
+                            const scale = currentDistance / initialDistance;
+                            
+                            if (scale > 1) {
+                                camera.radius = Math.min(camera.upperRadiusLimit, camera.radius + scale * 0.5);
+                            } else {
+                                camera.radius = Math.max(camera.lowerRadiusLimit, camera.radius - (2 - scale) * 0.5);
+                            }
+                            
+                            e.preventDefault();
+                        }
+                    });
+                    
+                    canvas.addEventListener('touchend', function(e) {
+                        if (e.touches.length < 2) {
+                            initialDistance = null;
+                            gestureIndicator.textContent = '👆';
+                        }
+                    });
+                    
+                    canvas.addEventListener('click', function(e) {
+                        if (!isVRMode && !autoRotate) {
+                            changeBuildingSide(resetViewIndicatorTimer);
+                        }
+                        e.preventDefault();
+                    });
+                }
+                
+                function initGyroscope() {
+                    if (typeof DeviceOrientationEvent !== 'undefined' && 
+                        typeof DeviceOrientationEvent.requestPermission === 'function') {
+                        DeviceOrientationEvent.requestPermission()
+                            .then(response => {
+                                if (response === 'granted') {
+                                    setupGyroscope();
+                                } else {
+                                    console.warn('Доступ к гироскопу отклонен');
+                                    gyroStatus.textContent = "Гироскоп: Доступ запрещен";
+                                }
+                            })
+                            .catch(console.error);
+                    } else {
+                        setupGyroscope();
+                    }
+                }
+                
+                function setupGyroscope() {
+                    let lastGamma = 0;
+                    let lastBeta = 0;
+                    
+                    window.addEventListener('deviceorientation', function(event) {
+                        if (!gyroEnabled) {
+                            gyroEnabled = true;
+                            gyroStatus.textContent = "Гироскоп: Активен";
+                            loadingElement.classList.add('hidden');
+                        }
+                        
+                        lastGamma = event.gamma;
+                        lastBeta = event.beta;
+                        
+                        if (isVRMode && event.gamma !== null && event.beta !== null) {
+                            if (needCalibration) {
+                                alphaOffset = camera.alpha - (-lastGamma * (Math.PI / 180));
+                                betaOffset = camera.beta - ((lastBeta - 90) * (Math.PI / 180));
+                                needCalibration = false;
+                                console.log("Гироскоп откалиброван");
+                            }
+                            
+                            const newAlpha = -lastGamma * (Math.PI / 180) + alphaOffset;
+                            const newBeta = (lastBeta - 90) * (Math.PI / 180) + betaOffset;
+                            
+                            camera.alpha = newAlpha;
+                            camera.beta = Math.max(
+                                camera.lowerBetaLimit, 
+                                Math.min(camera.upperBetaLimit, newBeta)
+                            );
+                        }
+                    });
+                    
+                    window.addEventListener('devicemotion', function(event) {
+                        if (event.rotationRate) {
+                            gyroStatus.textContent = "";
+                        }
+                    });
+                }
+                
+                window.addEventListener('resize', function() {
+                    engine.resize();
+                });
+                
+                scene.registerBeforeRender(function() {
+                    if (autoRotate && !isVRMode) {
+                        camera.alpha += autoRotateSpeed;
+                    }
+                    
+                    if (isStereoscopicMode && leftCamera && rightCamera) {
+                        leftCamera.alpha = camera.alpha;
+                        leftCamera.beta = camera.beta;
+                        leftCamera.radius = camera.radius;
+                        leftCamera.setTarget(camera.getTarget());
+                        
+                        rightCamera.alpha = camera.alpha;
+                        rightCamera.beta = camera.beta;
+                        rightCamera.radius = camera.radius;
+                        rightCamera.setTarget(camera.getTarget());
+                        
+                        const interpupillaryDistance = 0.5;
+                        
+                        const rightVector = new BABYLON.Vector3(
+                            Math.cos(camera.alpha), 
+                            0, 
+                            Math.sin(camera.alpha)
+                        );
+                        
+                        leftCamera.position = camera.position.add(rightVector.scale(-interpupillaryDistance / 2));
+                        rightCamera.position = camera.position.add(rightVector.scale(interpupillaryDistance / 2));
+                    }
+                });
+                
+                engine.runRenderLoop(function() {
+                    scene.render();
+                });
+                
+                document.addEventListener('fullscreenchange', function() {
+                    if (!document.fullscreenElement) {
+                        if (isVRMode) {
+                            isVRMode = false;
+                            isStereoscopicMode = false;
+                            currentModeIndex = 0;
+                            modeToggleBtn.textContent = modes[currentModeIndex].icon;
+                            modeIndicator.textContent = "Режим: " + modes[currentModeIndex].name;
+                            disableStereoscopicVR();
+                        }
+                    }
+                });
+                
+                document.addEventListener('gesturestart', function(e) {
+                    e.preventDefault();
+                });
+                
+                document.addEventListener('gesturechange', function(e) {
+                    e.preventDefault();
+                });
+                
+                document.addEventListener('gestureend', function(e) {
+                    e.preventDefault();
+                });
+            }
+        });
+    </script>
+</body>
+</html>
